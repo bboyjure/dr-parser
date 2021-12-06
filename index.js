@@ -8,11 +8,12 @@ const path = require('path');
 const app = express();
 const mongoose = require("mongoose");
 const cors = require('cors');
+const xlsx = require('node-xlsx');
 app.use(cors());
 app.use(express.json());
 
 const url = 'https://zavarovanec.zzzs.si/wps/portal/portali/azos/ioz/ioz_izvajalci';
-
+const currentMonthNum = new Date().getMonth() + 1;
 
 const scrapeZZZS = () => {
     return new Promise(resolve => {
@@ -48,22 +49,29 @@ const scrapeZZZS = () => {
 }
 
 
-const downloadFiles = (url, date, title) => {
+const downloadFiles = async (url, date, title) => {
     let dir = `./downloads-${date}`;
+    const path = `${dir}/${title}.xlsx`;
+    let f = false;
     if (!fs.existsSync(dir)){
         fs.mkdirSync(dir);
     }
-    https.get(url, (res) => {
-        const path = `${dir}/${title}.xlsx`;
+    await https.get(url, (res) => {
         const writeStream = fs.createWriteStream(path);
-      
         res.pipe(writeStream);
       
         writeStream.on("finish", () => {
           writeStream.close();
-          console.log(`Download ${title} Completed`);
+          f = true
+          // console.log(`Download ${title} Completed`);
         });
       });
+      if(f){
+          // Parse a buffer
+          const workSheetsFromBuffer = xlsx.parse(fs.readFileSync(path));
+          // Parse a file
+          return workSheetsFromFile = xlsx.parse(path)[0];
+      }
 }
 
 
@@ -77,7 +85,6 @@ app.get('/results', async (req, res) => {
 })
 
 app.get('/download/current', async (req, res) =>{
-    const currentMonthNum = new Date().getMonth() + 1;
     const currentData = await scrapeZZZS();
     const fData = currentData.filter(data => {
        return currentMonthNum.toString() == data.date.split(".")[1];
@@ -91,13 +98,14 @@ app.get('/download/current', async (req, res) =>{
 app.get('/download/:id', async (req, res) =>{
     const id = req.params.id;
     const currentData = await scrapeZZZS();
+    const responseArray = [];
     const fData = currentData.filter(data => {
        return id.toString() == data.date.split(".")[1];
     })
     fData.forEach(element => {
-        downloadFiles(element.url, `${currentMonthNum}-${new Date().getFullYear()}`, element.title )
+        responseArray.push(downloadFiles(element.url, `${id}-${new Date().getFullYear()}`, element.title ));
     });
-    res.json(fData);
+    res.json(responseArray);
 })
 
 
